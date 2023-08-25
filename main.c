@@ -18,75 +18,47 @@ int main()
     }
 }
 
-void AppleLogic()
+void Initialization()
 {
-    // if no apple
-    if (apple_x == -1)
-    {
-        apple_x = rand() % COLS;
-        apple_y = rand() % ROWS;
+    printf("\e[?25l");      // hide cursor
+    system("clear");        // clear terminal
 
-        // check if apple isn't on tail
-        for (int i = tail; i != head; i = (i + 1) % map_size)
-            if (x[i] == apple_x && y[i] == apple_y)
-                apple_x = -1;
+    // setup raw mode  
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    new_termios = orig_termios;
+    new_termios.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
 
-        // if apple valid, draw 
-        if (apple_x >= 0) 
-        {
-            printf("\e[%iB\e[%iC❤", apple_y + 1, apple_x + 1); 
-            printf("\e[%iF", apple_y + 1);                   
-        }
-    }
-}
+    // init values 
+    head = 4, tail = 0;
+    dir_x = 0, dir_y = 1; 
+    apple_x = -1;
+    score = 0;
+    debug = -1;
+    debug_cleared = 1;
+    ai_mode = 1;
+    x_diff = 0;
+    y_diff = 0;
 
-void SnakeLogic()
-{
-    if (ai_mode == 1) AI_Mode();
-    fflush(stdout);
-
-    printf("\e[%iB\e[%iC ", y[tail] + 1, x[tail] + 1);      // clear last tail part from screen
-    printf("\e[H");                                         // send cursor back to top left
-
-    // if apple eaten
-    if (x[head] == apple_x && y[head] == apple_y) 
-    {
-        apple_x = -1;
-        score += 1;
-        printf("\a"); // beep (mac)
-    }
-    else tail = (tail + 1) % map_size;
-
-    // recalculate head
-    int newhead = (head + 1) % map_size;
-    x[newhead] = (x[head] + dir_x + COLS) % COLS;
-    y[newhead] = (y[head] + dir_y + ROWS) % ROWS;
-    head = newhead;
-
-    // if snake collides with itself
-    for (int i = tail; i != head; i = (i + 1) % map_size)
-        if (x[i] == x[head] && y[i] == y[head])
-            GameOver();
-
-    // draw head
-    printf("\e[%iB\e[%iC▓", y[head] + 1, x[head] + 1);
-    printf("\e[H");  
+    // start pos   
+    x[head] = COLS / 2; 
+    y[head] = ROWS / 2; 
 }
 
 void InputLogic()
 {
-    struct timeval tv;
-    fd_set fds;
-    tv.tv_sec = 0;
+    struct timeval tv;           
+    tv.tv_sec = 0;                    // input polling rate
     tv.tv_usec = 0;
-
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+    
+    fd_set fds;                       
+    FD_ZERO(&fds);                   
+    FD_SET(STDIN_FILENO, &fds);       
+    select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);    
 
     if (FD_ISSET(STDIN_FILENO, &fds)) 
     {
-        int ch = getchar();
+        int ch = getchar();            
 
         if (ch == 'q') ExitGame();
         else if (ch == 'z') ai_mode *= -1;
@@ -116,45 +88,61 @@ void InputLogic()
     }
 }
 
-void DrawMap()
+void SnakeLogic()
 {
-    // Top
-    printf("╔");
+    if (ai_mode == 1) AI_Mode();
 
-    for (int i = 0; i < COLS; i++) 
+
+    printf("\e[%iB\e[%iC ", y[tail] + 1, x[tail] + 1);      // clear last tail part from screen
+    printf("\e[H");                                         // send cursor back to top left
+
+
+    // if apple eaten
+    if (x[head] == apple_x && y[head] == apple_y) 
     {
-        usleep(2 * 1000000 / 60);
-        printf("═");
-        fflush(stdout);
+        apple_x = -1;
+        score += 1;
+        printf("\a");                                       // beep (mac)
     }
+    else tail = (tail + 1) % map_size;
 
-    printf("╗\n");
 
-    // Middle
-    for (int j = 0; j < ROWS; j++) 
+    // calculate next head coordinates
+    x[head+1] = (x[head] + dir_x + COLS) % COLS;
+    y[head+1] = (y[head] + dir_y + ROWS) % ROWS;
+    head = (head + 1) % map_size;
+
+
+    // if snake collides with itself
+    for (int i = tail; i != head; i = (i + 1) % map_size)
+        if (x[i] == x[head] && y[i] == y[head])
+            GameOver();
+
+    // draw head
+    printf("\e[%iB\e[%iC▓", y[head] + 1, x[head] + 1);
+    printf("\e[H");  
+}
+
+void AppleLogic()
+{
+    // if no apple
+    if (apple_x == -1)
     {
-        usleep(1 * 1000000 / 60);
-        printf("║");
+        apple_x = rand() % COLS;
+        apple_y = rand() % ROWS;
 
-        for (int i = 0; i < COLS; i++) 
-            printf(" ");
-        
-        usleep(1 * 1000000 / 60);
-        printf("║\n");
+        // check if apple isn't on tail
+        for (int i = tail; i != head; i = (i + 1) % map_size)
+            if (x[i] == apple_x && y[i] == apple_y)
+                apple_x = -1;
+
+        // if apple valid, draw 
+        if (apple_x >= 0) 
+        {
+            printf("\e[%iB\e[%iC❤", apple_y + 1, apple_x + 1); 
+            printf("\e[H");                   
+        }
     }
-
-    // Bottom
-    printf("╚");
-
-    for (int i = 0; i < COLS; i++) 
-    {
-        usleep(2 * 1000000 / 60);
-        printf("═");
-        fflush(stdout);
-    }
-
-    printf("╝\n");
-    printf("\e[H"); 
 }
 
 void RenderUI()
@@ -162,58 +150,6 @@ void RenderUI()
     WriteLine("\e[1mSCORE: ", score, 0);
     WriteLine("\e[mControls: \e[1mWASD\e[m", -2, 2);
     WriteLine("Debug: \e[1mX\e[m", -2, 3);
-}
-
-int ExitGame()
-{
-    printf("\e[?25h");  // show cursor
-    system("reset");    // reset terminal
-    exit(0);
-}
-
-void GameOver()
-{
-    // game over screen
-    printf("\e[%iB\e[%iC GAME OVER!", ROWS / 2 - 1, COLS / 2 - 5);
-    printf("\e[10B\e[15DR to retry, Q to quit");
-    printf("\e[H"); 
-
-    int pressed_key;
-
-    do {
-        pressed_key = getchar();
-
-        if (pressed_key == 'r') main();
-        else if (pressed_key == 'q') ExitGame();
-
-    } while (pressed_key != 'r' || 'q');
-}
-
-void Initialization()
-{
-    printf("\e[?25l");      // hide cursor
-    system("clear");        // clear terminal
-
-    // setup raw mode  
-    tcgetattr(STDIN_FILENO, &orig_termios);
-    new_termios = orig_termios;
-    new_termios.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
-
-    // init values 
-    head = 0, tail = 0;
-    dir_x = 0, dir_y = 1; 
-    apple_x = -1;
-    score = 0;
-    debug = -1;
-    debug_cleared = 1;
-    ai_mode = 1;
-    x_diff = 0;
-    y_diff = 0;
-
-    // start pos   
-    x[head] = COLS / 2; 
-    y[head] = ROWS / 2; 
 }
 
 void Debugger()
@@ -271,19 +207,87 @@ void Debugger()
     }
 }
 
+void DrawMap()
+{
+    // Top
+    printf("╔");
+
+    for (int i = 0; i < COLS; i++) 
+    {
+        usleep(2 * 1000000 / 60);
+        printf("═");
+        fflush(stdout);
+    }
+
+    printf("╗\n");
+
+    // Middle
+    for (int j = 0; j < ROWS; j++) 
+    {
+        usleep(1 * 1000000 / 60);
+        printf("║");
+
+        for (int i = 0; i < COLS; i++) 
+            printf(" ");
+        
+        usleep(1 * 1000000 / 60);
+        printf("║\n");
+    }
+
+    // Bottom
+    printf("╚");
+
+    for (int i = 0; i < COLS; i++) 
+    {
+        usleep(2 * 1000000 / 60);
+        printf("═");
+        fflush(stdout);
+    }
+
+    printf("╝\n");
+    printf("\e[H"); 
+}
+
 void WriteLine(const char* line, int value, int line_offset)
 {
-    char* line2 = malloc(200); // to array?
+    char* line2 = malloc(strlen(line)); 
     strcpy(line2, line);
 
-    printf("\e[%iC\e[%iB\e[K", UI_OFFSET_X, UI_OFFSET_Y + line_offset); // erase line
+    // erase line
+    printf("\e[%iC\e[%iB\e[K", UI_OFFSET_X, UI_OFFSET_Y + line_offset); 
     printf("\e[H"); 
 
+    // print
     if (value == -2) printf("\e[%iC\e[%iB%s", UI_OFFSET_X, UI_OFFSET_Y + line_offset, line2);
     else printf("\e[%iC\e[%iB%s%i", UI_OFFSET_X, UI_OFFSET_Y + line_offset, line2, value);
-
     printf("\e[H"); 
+
     free(line2);
+}
+
+int ExitGame()
+{
+    printf("\e[?25h");  // show cursor
+    system("reset");    // reset terminal
+    exit(0);
+}
+
+void GameOver()
+{
+    // game over screen
+    printf("\e[%iB\e[%iC GAME OVER!", ROWS / 2 - 1, COLS / 2 - 5);
+    printf("\e[10B\e[15DR to retry, Q to quit");
+    printf("\e[H"); 
+
+    int pressed_key;
+
+    do {
+        pressed_key = getchar();
+
+        if (pressed_key == 'r') main();
+        else if (pressed_key == 'q') ExitGame();
+
+    } while (pressed_key != 'r' || 'q');
 }
 
 void AI_Mode()
@@ -305,7 +309,7 @@ void AI_Mode()
         // if next step is tail  
         if (x[head] + dir_x == x[i] % COLS && y[head] + dir_y == y[i] % ROWS)
         {
-            WriteLine("x", -2, 19);
+            // WriteLine("x", -2, 19);
 
             // if moving vertically 
             if (dir_x == 0)     
